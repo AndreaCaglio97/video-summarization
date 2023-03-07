@@ -1,0 +1,38 @@
+body {
+    background-color: #eee;
+}
+/*.fullScreenFrame > div {*/
+/*    display: flex;*/
+/*    justify-content: center;*/
+/*}*/
+/*.stButton>button {*/
+/*    color: #4F8BF9;*/
+/*    border-radius: 50%;*/
+/*    height: 3em;*/
+/*    width: 3em;*/
+/*}*/
+
+.stTextInput>div>div>input {
+    color: #4F8BF9;
+}
+.stTextArea>div>div>input {
+    color: #4F8BF9;
+    min-height: 500px;
+}
+
+
+/*.st-cj {*/
+/*    min-height: 500px;*/
+/*    spellcheck="false";*/
+/*    color: #4F8BF9;*/
+/*}*/
+/*.st-ch {*/
+/*    min-height: 500px;*/
+/*    spellcheck="false";*/
+/*    color: #4F8BF9;*/
+/*}*/
+/*.st-bb {*/
+/*    min-height: 500px;*/
+/*    spellcheck="false";*/
+/*    color: #4F8BF9;*/
+/*}*/
