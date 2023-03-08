@@ -1,157 +1,506 @@
+import validators, re
+import torch
+from fake_useragent import UserAgent
+from bs4 import BeautifulSoup
 import streamlit as st
-import os
+from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
+from sentence_transformers import SentenceTransformer
+import en_core_web_lg
+import time
+import base64
+import requests
+import docx2txt
+from io import StringIO
+from PyPDF2 import PdfFileReader
+import warnings
+import nltk
+import itertools
+import numpy as np
 
-from transformers import AutoTokenizer
-from transformers import AutoModelForSeq2SeqLM
-from transformers import pipeline
-from transformers import set_seed
+nltk.download('punkt')
 
-debug = False
+from nltk import sent_tokenize
 
-MODELS = [
-    "ARTeLab/mbart-summarization-fanpage",
-    "ARTeLab/mbart-summarization-ilpost",
-    "ARTeLab/mbart-summarization-mlsum",
-    "ARTeLab/it5-summarization-mlsum",
-    "ARTeLab/it5-summarization-ilpost",
-    "ARTeLab/it5-summarization-fanpage"
-]
+warnings.filterwarnings("ignore")
 
-DEFAULT_TEXT: str = """(Fanpage) Dopo oltre mezzo secolo, il mistero della Natività di Caravaggio resta intatto. L'opera, intitolata la "Natività con i Santi Lorenzo e Francesco d'Assisi", fu trafugata la notte tra il 17 e il 18 ottobre 1969 dall'Oratorio di San Lorenzo a Palermo e tuttora non è stata ancora recuperata. L'olio su tela realizzato da Caravaggio, inserito dagli investigatori nella top ten mondiale delle opere d'arte trafugate e mai più ritrovate, ha un valore di mercato che si aggirerebbe oggi intorno ai 20 milioni di dollari secondo l'FBI. La sua storia è avvolta nel mistero e dopo cinquantuno anni ancora non è stata risolta, dopo il furto della mafia nel 1969 e forse ormai distrutta. L'unica certezza è che nemmeno questo Natale potremo ammirare l'opera raffigurante la nascita di Cristo del grande genio pittorico italiano. E forse, secondo i più pessimisti, non ci riusciremo mai più. Nella notte tra il 17 e il 18 ottobre, nel cuore di Palermo, i boss di Cosa Nostra si intrufolarono nell'Oratorio di San Lorenzo e arrotolarono la "Natività con i Santi Lorenzo e Francesco d'Assisi" di Caravaggio in malo modo, facendo sgranare la tela. Una delle più alte testimonianza dell'arte di ogni tempo fu distrutta così. Ma come facciamo a sapere oggi che la tela è andata distrutta? Fu il pentito Francesco Marino Mannoia, durante il processo Andreotti nel 1996 a raccontare del presunto disastro di un gioiello arrotolato in fretta e portato via in segno di sfregio. Ma questa versione stride con quella di un altro pentito che ricorda il quadro affisso ai summit di mafia, come un trofeo, mentre sui giornali si sussurrava di losche ma non provate trattative da 60 miliardi di vecchie lire fra mediatori e trafficanti. Nel 2017, il mafioso Gaetano Grado asserisce che la tela sarebbe stata nascosta, ma all'estero: nel 1970 il boss Badalamenti l'avrebbe trasferita in Svizzera in cambio di una notevole somma di franchi ad un antiquario svizzero, giunto a Palermo per definire l'affare. Grado riferisce anche che Badalamenti gli avrebbe detto che il quadro era stato scomposto per essere venduto sul mercato clandestino."""
+# In[2]:
 
-
-class TextSummarizer:
-    def __init__(self):
-        self.tokenizer = None
-        self.model = None
-        self.generator = None
-        self.model_loaded = None
-        set_seed(42)
-
-    def load(self, model_name):
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        self.generator = pipeline(
-            "text2text-generation", model=self.model, tokenizer=self.tokenizer
-        )
-        self.model_loaded = model_name
-
-    def summarize(self, model_name, input_text, generate_kwargs) -> str:
-        if not self.generator or self.model_loaded != model_name:
-            with st.spinner("meanwhile: downloading/loading selected model...please don't go :("):
-                self.load(model_name)
-        return self.generator(
-            input_text, return_tensors=False, return_text=True, **generate_kwargs
-        )[0].get("generated_text")
+time_str = time.strftime("%d%m%Y-%H%M%S")
+HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem; 
+margin-bottom: 2.5rem">{}</div> """
 
 
-@st.cache(allow_output_mutation=True)
-def instantiate_generator():
-    summarizer = TextSummarizer()
+# Functions
+
+def article_text_extractor(url: str):
+    '''Extract text from url and divide text into chunks if length of text is more than 500 words'''
+
+    ua = UserAgent()
+
+    headers = {'User-Agent': str(ua.chrome)}
+
+    r = requests.get(url, headers=headers)
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    title_text = soup.find_all(["h1"])
+    para_text = soup.find_all(["p"])
+    article_text = [result.text for result in para_text]
+
+    try:
+
+        article_header = [result.text for result in title_text][0]
+
+    except:
+
+        article_header = ''
+
+    article = nlp(" ".join(article_text))
+    sentences = [i.text for i in list(article.sents)]
+
+    current_chunk = 0
+    chunks = []
+
+    for sentence in sentences:
+        if len(chunks) == current_chunk + 1:
+            if len(chunks[current_chunk]) + len(sentence.split(" ")) <= 500:
+                chunks[current_chunk].extend(sentence.split(" "))
+            else:
+                current_chunk += 1
+                chunks.append(sentence.split(" "))
+        else:
+            chunks.append(sentence.split(" "))
+
+    for chunk_id in range(len(chunks)):
+        chunks[chunk_id] = " ".join(chunks[chunk_id])
+
+    return article_header, chunks
+
+
+def chunk_clean_text(text):
+    """Chunk text longer than 500 tokens"""
+
+    article = nlp(text)
+    sentences = [i.text for i in list(article.sents)]
+
+    current_chunk = 0
+    chunks = []
+
+    for sentence in sentences:
+        if len(chunks) == current_chunk + 1:
+            if len(chunks[current_chunk]) + len(sentence.split(" ")) <= 500:
+                chunks[current_chunk].extend(sentence.split(" "))
+            else:
+                current_chunk += 1
+                chunks.append(sentence.split(" "))
+        else:
+            chunks.append(sentence.split(" "))
+
+    for chunk_id in range(len(chunks)):
+        chunks[chunk_id] = " ".join(chunks[chunk_id])
+
+    return chunks
+
+
+def preprocess_plain_text(x):
+    x = x.encode("ascii", "ignore").decode()  # unicode
+    x = re.sub(r"https*\S+", " ", x)  # url
+    x = re.sub(r"@\S+", " ", x)  # mentions
+    x = re.sub(r"#\S+", " ", x)  # hastags
+    x = re.sub(r"\s{2,}", " ", x)  # over spaces
+    x = re.sub("[^.,!?A-Za-z0-9]+", " ", x)  # special charachters except .,!?
+
+    return x
+
+
+def extract_pdf(file):
+    '''Extract text from PDF file'''
+
+    pdfReader = PdfFileReader(file)
+    count = pdfReader.numPages
+    all_text = ""
+    for i in range(count):
+        page = pdfReader.getPage(i)
+        all_text += page.extractText()
+
+    return all_text
+
+
+def extract_text_from_file(file):
+    '''Extract text from uploaded file'''
+
+    # read text file
+    if file.type == "text/plain":
+        # To convert to a string based IO:
+        stringio = StringIO(file.getvalue().decode("utf-8"))
+
+        # To read file as string:
+        file_text = stringio.read()
+
+    # read pdf file
+    elif file.type == "application/pdf":
+        file_text = extract_pdf(file)
+
+    # read docx file
+    elif (
+            file.type
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
+        file_text = docx2txt.process(file)
+
+    return file_text
+
+
+def summary_downloader(raw_text):
+    b64 = base64.b64encode(raw_text.encode()).decode()
+    new_filename = "new_text_file_{}_.txt".format(time_str)
+    st.markdown("#### Download Summary as a File ###")
+    href = f'<a href="data:file/txt;base64,{b64}" download="{new_filename}">Click to Download!!</a>'
+    st.markdown(href, unsafe_allow_html=True)
+
+
+def get_all_entities_per_sentence(text):
+    doc = nlp(''.join(text))
+
+    sentences = list(doc.sents)
+
+    entities_all_sentences = []
+    for sentence in sentences:
+        entities_this_sentence = []
+
+        # SPACY ENTITIES
+        for entity in sentence.ents:
+            entities_this_sentence.append(str(entity))
+
+        # FLAIR ENTITIES (CURRENTLY NOT USED)
+        # sentence_entities = Sentence(str(sentence))
+        # tagger.predict(sentence_entities)
+        # for entity in sentence_entities.get_spans('ner'):
+        #     entities_this_sentence.append(entity.text)
+
+        # XLM ENTITIES
+        entities_xlm = [entity["word"] for entity in ner_model(str(sentence))]
+        for entity in entities_xlm:
+            entities_this_sentence.append(str(entity))
+
+        entities_all_sentences.append(entities_this_sentence)
+
+    return entities_all_sentences
+
+
+def get_all_entities(text):
+    all_entities_per_sentence = get_all_entities_per_sentence(text)
+    return list(itertools.chain.from_iterable(all_entities_per_sentence))
+
+
+def get_and_compare_entities(article_content, summary_output):
+    all_entities_per_sentence = get_all_entities_per_sentence(article_content)
+    entities_article = list(itertools.chain.from_iterable(all_entities_per_sentence))
+
+    all_entities_per_sentence = get_all_entities_per_sentence(summary_output)
+    entities_summary = list(itertools.chain.from_iterable(all_entities_per_sentence))
+
+    matched_entities = []
+    unmatched_entities = []
+    for entity in entities_summary:
+        if any(entity.lower() in substring_entity.lower() for substring_entity in entities_article):
+            matched_entities.append(entity)
+        elif any(
+                np.inner(sentence_embedding_model.encode(entity, show_progress_bar=False),
+                         sentence_embedding_model.encode(art_entity, show_progress_bar=False)) > 0.9 for
+                art_entity in entities_article):
+            matched_entities.append(entity)
+        else:
+            unmatched_entities.append(entity)
+
+    matched_entities = list(dict.fromkeys(matched_entities))
+    unmatched_entities = list(dict.fromkeys(unmatched_entities))
+
+    matched_entities_to_remove = []
+    unmatched_entities_to_remove = []
+
+    for entity in matched_entities:
+        for substring_entity in matched_entities:
+            if entity != substring_entity and entity.lower() in substring_entity.lower():
+                matched_entities_to_remove.append(entity)
+
+    for entity in unmatched_entities:
+        for substring_entity in unmatched_entities:
+            if entity != substring_entity and entity.lower() in substring_entity.lower():
+                unmatched_entities_to_remove.append(entity)
+
+    matched_entities_to_remove = list(dict.fromkeys(matched_entities_to_remove))
+    unmatched_entities_to_remove = list(dict.fromkeys(unmatched_entities_to_remove))
+
+    for entity in matched_entities_to_remove:
+        matched_entities.remove(entity)
+    for entity in unmatched_entities_to_remove:
+        unmatched_entities.remove(entity)
+
+    return matched_entities, unmatched_entities
+
+
+def highlight_entities(article_content, summary_output):
+    markdown_start_red = "<mark class=\"entity\" style=\"background: rgb(238, 135, 135);\">"
+    markdown_start_green = "<mark class=\"entity\" style=\"background: rgb(121, 236, 121);\">"
+    markdown_end = "</mark>"
+
+    matched_entities, unmatched_entities = get_and_compare_entities(article_content, summary_output)
+
+    print(summary_output)
+
+    for entity in matched_entities:
+        summary_output = re.sub(f'({entity})(?![^rgb\(]*\))', markdown_start_green + entity + markdown_end,
+                                summary_output)
+
+    for entity in unmatched_entities:
+        summary_output = re.sub(f'({entity})(?![^rgb\(]*\))', markdown_start_red + entity + markdown_end,
+                                summary_output)
+
+    print("")
+    print(summary_output)
+
+    print("")
+    print(summary_output)
+
+    soup = BeautifulSoup(summary_output, features="html.parser")
+
+    return HTML_WRAPPER.format(soup)
+
+
+def clean_text(text, doc=False, plain_text=False, url=False):
+    """Return clean text from the various input sources"""
+
+    if url:
+        is_url = validators.url(text)
+
+        if is_url:
+            # complete text, chunks to summarize (list of sentences for long docs)
+            article_title, chunks = article_text_extractor(url=url_text)
+
+            return article_title, chunks
+
+    elif doc:
+
+        clean_text = chunk_clean_text(preprocess_plain_text(extract_text_from_file(text)))
+
+        return None, clean_text
+
+    elif plain_text:
+
+        clean_text = chunk_clean_text(preprocess_plain_text(text))
+
+        return None, clean_text
+
+
+@st.experimental_singleton(suppress_st_warning=True)
+def get_spacy():
+    nlp = en_core_web_lg.load()
+    return nlp
+
+
+@st.experimental_singleton(suppress_st_warning=True)
+def facebook_model():
+    model_name = 'facebook/bart-large-cnn'
+    summarizer = pipeline('summarization', model=model_name, tokenizer=model_name,
+                          device=0 if torch.cuda.is_available() else -1)
     return summarizer
 
 
-def main():
-    st.set_page_config(  # Alternate names: setup_page, page, layout
-        page_title="ARTeLab SummIT",
-        layout="wide",  # Can be "centered" or "wide". In the future also "dashboard", etc.
-        initial_sidebar_state="expanded",  # Can be "auto", "expanded", "collapsed"
-        page_icon="📰",  # String, anything supported by st.image, or None.
-    )
+@st.experimental_singleton(suppress_st_warning=True)
+def schleifer_model():
+    model_name = 'sshleifer/distilbart-cnn-12-6'
+    summarizer = pipeline('summarization', model=model_name, tokenizer=model_name,
+                          device=0 if torch.cuda.is_available() else -1)
+    return summarizer
 
-    with open("style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-    generator = instantiate_generator()
+@st.experimental_singleton(suppress_st_warning=True)
+def google_model():
+    model_name = 'google/pegasus-large'
+    summarizer = pipeline('summarization', model=model_name, tokenizer=model_name,
+                          device=0 if torch.cuda.is_available() else -1)
+    return summarizer
 
-    st.markdown(
-        """
-        <style>
-        [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
-            width: 500px;
-        }
-        [data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
-            width: 500px;
-            margin-left: -500px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown("""# ARTeLab SummIT""")
-    #st.sidebar.image("fl.png", width=220)
-    st.sidebar.markdown(
-        """
-        * Create summaries of Italian news articles.
-        * Copy paste any Italian news text and press the Generate Summary botton.
-        """
-    )
-    st.sidebar.title("Parameters:")
 
-    MODEL = st.sidebar.selectbox("Choose model", index=1, options=MODELS)
+@st.experimental_singleton(suppress_st_warning=True)
+def get_sentence_embedding_model():
+    return SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
-    min_length = st.sidebar.number_input(
-        "Min length", min_value=10, max_value=150, value=40
-    )
-    max_length = st.sidebar.number_input(
-        "Max length", min_value=20, max_value=250, value=142
-    )
-    no_repeat_ngram_size = st.sidebar.number_input(
-        "No repeat NGram size", min_value=1, max_value=5, value=3
-    )
 
-    if sampling_mode := st.sidebar.selectbox(
-        "select a Mode", index=0, options=["Beam Search", "Top-k Sampling"]
-    ):
-        if sampling_mode == "Beam Search":
-            num_beams = st.sidebar.number_input(
-                "Num beams", min_value=1, max_value=10, value=4
+@st.experimental_singleton(suppress_st_warning=True)
+def get_ner_pipeline():
+    tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-large-finetuned-conll03-english")
+    model = AutoModelForTokenClassification.from_pretrained("xlm-roberta-large-finetuned-conll03-english")
+    return pipeline("ner", model=model, tokenizer=tokenizer, grouped_entities=True)
+
+
+# Load all different models (cached) at start time of the hugginface space
+sentence_embedding_model = get_sentence_embedding_model()
+ner_model = get_ner_pipeline()
+nlp = get_spacy()
+
+# Streamlit App
+
+st.title("Article Text and Link Extractive Summarizer with Entity Matching 📝")
+
+model_type = st.sidebar.selectbox(
+    "Model type", options=["Facebook-Bart", "Sshleifer-DistilBart", "Google-Pegasus"]
+)
+
+max_len = st.sidebar.slider("Maximum length of the summarized text", min_value=100, max_value=500, step=10)
+min_len = st.sidebar.slider("Minimum length of the summarized text", min_value=50, max_value=200, step=10)
+
+st.markdown(
+    "Model Source: [Facebook-Bart-large-CNN](https://huggingface.co/facebook/bart-large-cnn), [Sshleifer-distilbart-cnn-12-6](https://huggingface.co/sshleifer/distilbart-cnn-12-6) and [Google-Pegasus-large](https://huggingface.co/google/pegasus-large)"
+)
+
+st.markdown(
+    """The app supports extractive summarization which aims to identify the salient information that is then extracted and grouped together to form a concise summary. 
+    For documents or text that is more than 500 words long, the app will divide the text into chunks and summarize each chunk. Please note when using the sidebar slider, those values represent the min/max text length per chunk of text to be summarized. If your article to be summarized is 1000 words, it will be divided into two chunks of 500 words first then the default max length of 100 words is applied per chunk, resulting in a summarized text with 200 words maximum. 
+    There are two models available to choose from:""")
+
+st.markdown("""   
+    - Facebook-Bart, trained on large [CNN and Daily Mail](https://huggingface.co/datasets/cnn_dailymail) news articles.
+    - Sshleifer-Distilbart, which is a distilled (smaller) version of the large Bart model.
+    - Google Pegasus, trained on large C4 and HugeNews articles"""
             )
-            length_penalty = st.sidebar.number_input(
-                "Length penalty", min_value=0.0, max_value=5.0, value=1.5, step=0.1
-            )
-            params = {
-                "min_length": min_length,
-                "max_length": max_length,
-                "no_repeat_ngram_size": no_repeat_ngram_size,
-                "num_beams": num_beams,
-                "early_stopping": True,
-                "length_penalty": length_penalty,
-                "num_return_sequences": 1,
-            }
+
+st.markdown("""Please do note that the model will take longer to generate summaries for documents that are too long.""")
+
+st.markdown(
+    "The app only ingests the below formats for summarization task:"
+)
+st.markdown(
+    """- Raw text entered in text box. 
+- URL of an article to be summarized. 
+- Documents with .txt, .pdf or .docx file formats."""
+)
+
+st.markdown("---")
+
+if "text_area" not in st.session_state:
+    st.session_state.text_area = ''
+
+if "summ_area" not in st.session_state:
+    st.session_state.summ_area = ''
+
+url_text = st.text_input("Please Enter a url here")
+
+st.markdown(
+    "<h3 style='text-align: center; color: red;'>OR</h3>",
+    unsafe_allow_html=True,
+)
+
+plain_text = st.text_area("Please Paste/Enter plain text here", )
+
+st.markdown(
+    "<h3 style='text-align: center; color: red;'>OR</h3>",
+    unsafe_allow_html=True,
+)
+
+upload_doc = st.file_uploader(
+    "Upload a .txt, .pdf, .docx file for summarization"
+)
+
+if url_text:
+    article_title, cleaned_text = clean_text(url_text, url=True)
+    st.session_state.text_area = cleaned_text[0]
+
+elif plain_text:
+    article_title, cleaned_text = clean_text(plain_text, plain_text=True)
+    st.session_state.text_area = ''.join(cleaned_text)
+
+elif upload_doc:
+    article_title, cleaned_text = clean_text(upload_doc, doc=True)
+    st.session_state.text_area = ''.join(cleaned_text)
+
+article_text = st.text_area(
+    label='Full Article Text',
+    placeholder="Full article text will be displayed here..",
+    height=250,
+    key='text_area'
+)
+
+summarize = st.button("Summarize")
+
+# called on toggle button [summarize]
+if summarize:
+    if model_type == "Facebook-Bart":
+        if url_text:
+            text_to_summarize = cleaned_text[0]
         else:
-            top_k = st.sidebar.number_input(
-                "Top K", min_value=0, max_value=100, value=50
-            )
-            top_p = st.sidebar.number_input(
-                "Top P", min_value=0.0, max_value=1.0, value=0.9, step=0.05
-            )
-            temperature = st.sidebar.number_input(
-                "Temperature", min_value=0.0, max_value=1.0, value=0.3, step=0.05
-            )
-            params = {
-                "min_length": min_length,
-                "max_length": max_length,
-                "no_repeat_ngram_size": no_repeat_ngram_size,
-                "do_sample": True,
-                "top_k": top_k,
-                "top_p": top_p,
-                "temperature": temperature,
-                "num_return_sequences": 1,
-            }
+            text_to_summarize = cleaned_text
 
-    input_text = st.text_area("Enter an Italian news text", DEFAULT_TEXT, height=450)
-
-    if st.button("Generate summary"):
-
-        with st.spinner("Generating summary ..."):
-        
-            response = generator.summarize(MODEL, input_text, params)
-
-            st.header("Summary:")
-            st.markdown(response)
+        with st.spinner(
+                text="Loading Facebook-Bart Model and Extracting summary. This might take a few seconds depending on the length of your text..."
+        ):
+            summarizer_model = facebook_model()
+            summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
+                                               clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
+            summarized_text = ' '.join([summ['summary_text'] for summ in summarized_text])
 
 
-if __name__ == "__main__":
-    main()
+    elif model_type == "Sshleifer-DistilBart":
+        if url_text:
+            text_to_summarize = cleaned_text[0]
+        else:
+            text_to_summarize = cleaned_text
+
+        with st.spinner(
+                text="Loading Sshleifer-DistilBart Model and Extracting summary. This might take a few seconds depending on the length of your text..."
+        ):
+            summarizer_model = schleifer_model()
+            summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
+                                               clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
+            summarized_text = ' '.join([summ['summary_text'] for summ in summarized_text])
+
+    elif model_type == "Google-Pegasus":
+        if url_text:
+            text_to_summarize = cleaned_text[0]
+
+        else:
+            text_to_summarize = cleaned_text
+
+        with st.spinner(
+                text="Loading Google-Pegasus Model and Extracting summary. This might take a few seconds depending on the length of your text..."
+        ):
+            summarizer_model = google_model()
+            summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
+                                               clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
+            summarized_text = ' '.join([summ['summary_text'] for summ in summarized_text])
+
+    with st.spinner("Calculating and matching entities, this takes a few seconds..."):
+        entity_match_html = highlight_entities(text_to_summarize, summarized_text)
+        st.markdown("####")
+        print(entity_match_html)
+
+        if article_title:
+            # view summarized text (expander)
+            st.markdown(f"Article title: {article_title}")
+
+        st.session_state.summ_area = summarized_text
+
+        st.subheader('Summarized Text with no Entity Matching')
+
+        summarized_text = st.text_area(
+            label='',
+            placeholder="Full summarized text will be displayed here..",
+            height=250,
+            key='summ_area'
+        )
+
+        st.markdown("####")
+
+        st.subheader(
+            "Summarized text with matched entities in Green and mismatched entities in Red relative to the Original Text")
+
+        st.write(entity_match_html, unsafe_allow_html=True)
+
+        st.markdown("####")
+
+        summary_downloader(summarized_text)
+
+st.markdown("""
+            """)
+
+st.markdown("![visitor badge](https://visitor-badge.glitch.me/badge?page_id=nickmuchi-article-text-summarizer)")
