@@ -1,3 +1,4 @@
+openai-whisper
 gradio==3.18.0
 transformers==4.26.1
 torch==1.13.1
