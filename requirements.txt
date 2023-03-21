@@ -5,4 +5,5 @@ torch==1.13.1
 spacy==3.5.0
 protobuf==3.20.0
 ffmpeg-python==0.2.0
+sentencepiece==0.1.97
 en_core_web_lg @ https://huggingface.co/spacy/en_core_web_lg/resolve/main/en_core_web_lg-any-py3-none-any.whl
