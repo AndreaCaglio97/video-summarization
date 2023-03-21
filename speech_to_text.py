@@ -9,7 +9,7 @@ def speech_to_text(audio_file="audio.mp3"):
     return result["text"]
 
 
-def speech_to_text_translated(audio_file="audio.mp3", language="en"):
+def speech_to_text_translated(audio_file="audio.mp3", language="it"):
     options = {
         "language": language,
         "without_timestamps": False,
