@@ -73,10 +73,9 @@ def text_to_summary(text):
     summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
                                        clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
     summarized_text = ' '.join([summ['summary_text'] for summ in summarized_text])
-    print(summarized_text)
+    print("Summary:", summarized_text)
     return summarized_text
 
 
-# eexecute if importe
 if __name__ == '__main__':
     text_to_summary(plain_text)
