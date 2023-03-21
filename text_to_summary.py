@@ -50,7 +50,7 @@ def get_spacy():
 
 
 def google_model():
-    model_name = 'google/pegasus-large'
+    model_name = 'google/pegasus-xsum'
     summarizer = pipeline('summarization', model=model_name, tokenizer=model_name,
                           device=0 if torch.cuda.is_available() else -1)
     return summarizer
@@ -58,18 +58,16 @@ def google_model():
 
 nlp = get_spacy()
 
-model_type = "Google-Pegasus"
-
 max_len = 100
-min_len = 50
+min_len = 10
 
 plain_text = "The app supports extractive summarization which aims to identify the salient information that is then extracted and grouped together to form a concise summary. For documents or text that is more than 500 words long, the app will divide the text into chunks and summarize each chunk. Please note when using the sidebar slider, those values represent the min/max text length per chunk of text to be summarized. If your article to be summarized is 1000 words, it will be divided into two chunks of 500 words first then the default max length of 100 words is applied per chunk, resulting in a summarized text with 200 words maximum"
 
 summarizer_model = google_model()
 
 
-def text_to_summary(text):
-    text_to_summarize = clean_text(text)
+def text_to_summary(text, chunck_enabled=False):
+    text_to_summarize = clean_text(text) if chunck_enabled else text
     summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
                                        clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
     summarized_text = ' '.join([summ['summary_text'] for summ in summarized_text])
