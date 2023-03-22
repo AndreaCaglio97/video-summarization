@@ -47,7 +47,7 @@ def translate_api():
 
 
 @app.route("/summarize", methods=["POST"])
-def summarize():
+def summarize_api():
     file = request.files['file']
     if not file:
         return "bad request"
