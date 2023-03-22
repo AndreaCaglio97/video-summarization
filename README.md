@@ -1,41 +1,43 @@
----
-title: Text_summarizer
-emoji: 🏢
-colorFrom: yellow
-colorTo: purple
-sdk: gradio
-app_file: app.py
-pinned: false
----
+# Video Summarization
 
-# Configuration
+## Console application
+Starting from an Italian video, the application produces a summary of it by performing the following steps:
+- video to speech (a speech in Italian is extracted from an Italian video);
+- speech to text (an Italian speech is converted into an English text);
+- text to summary (the English text is summarized);
+- translation (the summary is translated into Italian).
 
-`title`: _string_  
-Display title for the Space
+#### Prerequisites:
+You must have the `ffmpeg` library installed on your environment in order to use OpenAI's Whisper model.
 
-`emoji`: _string_  
-Space emoji (emoji-only character allowed)
+You need to download any video you like in .mp4 format, rename it to **video.mp4**, 
+and place it in the project root.
 
-`colorFrom`: _string_  
-Color for Thumbnail gradient (red, yellow, green, blue, indigo, purple, pink, gray)
+Before you can run the application, you must install all the dependencies.
+To do this, you can run the following command in the terminal:
 
-`colorTo`: _string_  
-Color for Thumbnail gradient (red, yellow, green, blue, indigo, purple, pink, gray)
+`pip install -r requirements.txt`
 
-`sdk`: _string_  
-Can be either `gradio` or `streamlit`
+#### Run the app:
+To run the application, you can execute the following command in the terminal:
 
-`sdk_version` : _string_  
-Only applicable for `streamlit` SDK.  
-See [doc](https://hf.co/docs/hub/spaces) for more info on supported versions.
+`python main.py`
 
-`app_file`: _string_  
-Path to your main application file (which contains either `gradio` or `streamlit` Python code).  
-Path is relative to the root of the repository.
+## Gradio app
+#### Run the app:
+To run the application, you can execute the following command in the terminal:
 
-`pinned`: _boolean_  
-Whether the Space stays on top of your list.
+`gradio app.py`
 
+## Flask app
 
-## webapp
-FLASK_APP=webapp.py FLASK_ENV=development flask run
+#### Prerequisites:
+Before you can run the application, you must install `en_core_web_sm`.
+To do this, you can run the following command in the terminal:
+
+`python -m spacy download en_core_web_sm`
+
+#### Run the app:
+To run the application, you can execute the following command in the terminal:
+
+`FLASK_APP=webapp.py FLASK_ENV=development flask run`
