@@ -1,9 +1,7 @@
 import ffmpeg
 
 
-def video_to_speech(input_file_name='video.mp4'):
-    output_file_path = 'audio.mp3'
-
+def video_to_speech(input_file_name='video.mp4', output_file_path='audio.mp3'):
     stream = ffmpeg.input(input_file_name)
     audio_stream = stream.audio
     audio_stream = ffmpeg.output(audio_stream, output_file_path)

@@ -35,3 +35,7 @@ Path is relative to the root of the repository.
 
 `pinned`: _boolean_  
 Whether the Space stays on top of your list.
+
+
+## webapp
+FLASK_APP=webapp.py FLASK_ENV=development flask run
