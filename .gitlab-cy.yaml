@@ -1,0 +1,18 @@
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: docker:stable
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build --pull -t <your-registry>/<your-namespace>/<your-image-name>:latest .
+    - docker login -u <your-registry-username> -p <your-registry-password> <your-registry>
+    - docker push <your-registry>/<your-namespace>/<your-image-name>:latest
+  only:
+    - master

@@ -32,10 +32,10 @@ To run the application, you can execute the following command in the terminal:
 ## Flask app
 
 #### Prerequisites:
-Before you can run the application, you must install `en_core_web_sm`.
+Before you can run the application, you must install `en_core_web_lg`.
 To do this, you can run the following command in the terminal:
 
-`python -m spacy download en_core_web_sm`
+`python -m spacy download en_core_web_lg`
 
 #### Run the app:
 To run the application, you can execute the following command in the terminal:

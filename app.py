@@ -1,16 +1,69 @@
-import gradio as gr
-from gradio.mix import Parallel
+from flask import Flask
+from flask import request
+from flask import jsonify
+import os
+import tempfile
 
-title = "Text Summarizer"
-description = "Past an article text or other text. Submit the text and the machine will create four summaries based on words in the text. Which sentences in the text are the most important for the summaries? Which summaries are better for your case?"
+from speech_to_text import speech_to_text_translated
+from text_to_italian import translate
+from text_to_summary import text_to_summary
+from video_to_speech import video_to_speech
 
-io1 = gr.Interface.load('huggingface/sshleifer/distilbart-cnn-12-6')
-io2 = gr.Interface.load("huggingface/facebook/bart-large-cnn")
-io3 = gr.Interface.load("huggingface/csebuetnlp/mT5_multilingual_XLSum")
-io4 = gr.Interface.load("huggingface/google/pegasus-xsum")
+app = Flask(__name__)
 
-iface = Parallel(io1, io2, io3, io4,
-                 theme='huggingface',
-                 inputs=gr.inputs.Textbox(lines=10, label="Text"), title=title, description=description)
 
-iface.launch(share=False)
+@app.route("/")
+def hello_world():
+    return "<p>Hello, World!</p>"
+
+
+@app.route("/speech_to_text_translated", methods=["POST"])
+def speech_to_text_translated_api():
+    file = request.files['file']
+    if not file:
+        return "bad request"
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        print('created temporary directory', tmpdirname)
+        filename = file.filename
+        input_file_path = os.path.join(tmpdirname, filename)
+        output_file_path = os.path.join(tmpdirname, 'audio.mp3')
+        file.save(input_file_path)
+        video_to_speech(input_file_path, output_file_path)
+        res = speech_to_text_translated(output_file_path)
+        return jsonify(res)
+
+
+@app.route("/text_to_summary", methods=["POST"])
+def text_to_summary_api():
+    input_ = request.get_json()['input']
+    res = text_to_summary(input_)
+    return jsonify(res)
+
+
+@app.route("/translate", methods=["POST"])
+def translate_api():
+    input_ = request.get_json()['input']
+    res = translate(input_)
+    return jsonify(res)
+
+
+@app.route("/summarize", methods=["POST"])
+def summarize_api():
+    file = request.files['file']
+    if not file:
+        return "bad request"
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        print('created temporary directory', tmpdirname)
+        filename = file.filename
+        input_file_path = os.path.join(tmpdirname, filename)
+        output_file_path = os.path.join(tmpdirname, 'audio.mp3')
+        file.save(input_file_path)
+        video_to_speech(input_file_path, output_file_path)
+        [_, transcription] = speech_to_text_translated(output_file_path)
+        [_, summary] = text_to_summary(transcription)
+        [_, res] = translate(summary)
+        return jsonify(res)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
