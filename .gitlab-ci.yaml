@@ -1,0 +1,38 @@
+variables:
+  IMAGE_NAME: "audio-summary"
+  IMAGE_TAG: "latest"
+  CONTAINER_NAME: "audio-summary"
+  HOSTNAME: "audio-summary"
+  SCRIPTS_REPO: "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.intre.it/intre/hub-configurator.git"
+
+before_script:
+  - export SCRIPTS_DIR=$(mktemp -d)
+  - git clone -q --depth 1 "$SCRIPTS_REPO" "$SCRIPTS_DIR"
+  - 'freeport=$(bash $SCRIPTS_DIR/portFinder.sh "$DOCKER_HOST")'
+  - "echo found a free port $freeport"
+  - export CONTAINER_PORT_MAPPING="$freeport:5000"
+  - docker login -u "$cicd_username" -p "$cicd_token" "$REGISTRY_HOST"
+
+build_image:
+  script:
+    - docker image build -t "$REGISTRY_PATH"/"$IMAGE_NAME":"$IMAGE_TAG" .
+    - docker push "$REGISTRY_PATH"/"$IMAGE_NAME":"$IMAGE_TAG"
+  only:
+    - master
+
+start_container:
+  script:
+    - docker -H "$DOCKER_HOST" stop "$CONTAINER_NAME" || true
+    - docker -H "$DOCKER_HOST" rm "$CONTAINER_NAME" || true
+    - 'echo starting container $CONTAINER_NAME with ports "$CONTAINER_PORT_MAPPING"'
+    - docker -H "$DOCKER_HOST" run --network hub_authenticator --name "$CONTAINER_NAME" -d --restart always -p "$CONTAINER_PORT_MAPPING" -v /mnt/registrazioni/corsi:/usr/share/nginx/html/static/video "$REGISTRY_PATH"/"$IMAGE_NAME":"$IMAGE_TAG"
+  only:
+    - master
+
+expose_container:
+  script:
+    - 'containerport=$(bash $SCRIPTS_DIR/getPort.sh "$CONTAINER_NAME" "$DOCKER_HOST")'
+    - 'echo exposing container "$CONTAINER_NAME" with hostname $HOSTNAME with port $containerport'
+    - 'bash $SCRIPTS_DIR/exposeInternetWithAuth.sh "$HOSTNAME" "$containerport"'
+  only:
+    - master
