@@ -1,5 +1,5 @@
 import re
-import en_core_web_lg
+import en_core_web_sm
 import torch
 from transformers import pipeline
 
@@ -45,7 +45,7 @@ def clean_text(text):
 
 
 def get_spacy():
-    nlp = en_core_web_lg.load()
+    nlp = en_core_web_sm.load()
     return nlp
 
 
