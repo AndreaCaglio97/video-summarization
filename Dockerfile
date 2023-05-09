@@ -16,6 +16,8 @@ RUN pip install torch==1.13.1+cpu torchaudio==0.13.1 --extra-index-url https://d
 RUN pip install waitress
 RUN pip install -r requirements.txt
 
+
+FROM base as production
 # Copy the application code
 COPY video_to_speech.py text_to_italian.py text_to_summary.py speech_to_text.py app.py ./
 

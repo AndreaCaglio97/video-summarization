@@ -14,7 +14,7 @@ def chunk_clean_text(text):
 
     for sentence in sentences:
         if len(chunks) == current_chunk + 1:
-            if len(chunks[current_chunk]) + len(sentence.split(' ')) <= 500:
+            if len(chunks[current_chunk]) + len(sentence.split(' ')) <= 300:
                 chunks[current_chunk].extend(sentence.split(' '))
             else:
                 current_chunk += 1
@@ -66,7 +66,7 @@ plain_text = 'The app supports extractive summarization which aims to identify t
 summarizer_model = google_model()
 
 
-def text_to_summary(text, chunck_enabled=False):
+def text_to_summary(text, chunck_enabled=True):
     text_to_summarize = clean_text(text) if chunck_enabled else text
     summarized_text = summarizer_model(text_to_summarize, max_length=max_len, min_length=min_len,
                                        clean_up_tokenization_spaces=True, no_repeat_ngram_size=4)
