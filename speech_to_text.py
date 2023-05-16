@@ -5,8 +5,8 @@ model = whisper.load_model('base')
 
 def speech_to_text(audio_file='audio.mp3'):
     result = model.transcribe(audio_file)
-    print(result['text'])
-    return result['text']
+    message = 'Original text:'
+    return message, result['text']
 
 
 def speech_to_text_translated(audio_file='audio.mp3', language='it'):

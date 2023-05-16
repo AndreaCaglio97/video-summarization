@@ -1,8 +1,7 @@
-from speech_to_text import speech_to_text_translated
-from text_to_italian import translate
-from text_to_summary import text_to_summary
-from video_to_speech import video_to_speech
 from functools import reduce
+from speech_to_text import speech_to_text
+from summary_with_openai import summary_with_davinci
+from video_to_speech import video_to_speech
 
 video_file_name = 'video.mp4'
 # speech = video_to_speech(video_file_name)
@@ -11,7 +10,7 @@ video_file_name = 'video.mp4'
 # translate(summary)
 
 
-steps = [video_to_speech, speech_to_text_translated, text_to_summary, translate]
+steps = [video_to_speech, speech_to_text, summary_with_davinci]
 
 
 def main():
