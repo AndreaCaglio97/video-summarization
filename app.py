@@ -4,7 +4,8 @@ from flask import jsonify
 import os
 import tempfile
 
-from speech_to_text import speech_to_text_translated
+from speech_to_text import speech_to_text_translated, speech_to_text
+from summary_with_openai import summary_with_davinci
 from text_to_italian import translate
 from text_to_summary import text_to_summary
 from video_to_speech import video_to_speech
@@ -63,6 +64,24 @@ def summarize_api():
         [_, summary] = text_to_summary(transcription)
         [_, res] = translate(summary)
         return jsonify(res)
+
+
+@app.route("/summarize_with_openai", methods=["POST"])
+def summarize_with_openai_api():
+    file = request.files['file']
+    if not file:
+        return "bad request"
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        print('created temporary directory', tmpdirname)
+        filename = file.filename
+        input_file_path = os.path.join(tmpdirname, filename)
+        output_file_path = os.path.join(tmpdirname, 'audio.mp3')
+        file.save(input_file_path)
+        video_to_speech(input_file_path, output_file_path)
+        [_, transcription] = speech_to_text(output_file_path)
+        print("Audio transcription:", transcription)
+        [_, summary] = summary_with_davinci(transcription)
+        return jsonify(summary)
 
 
 if __name__ == "__main__":
